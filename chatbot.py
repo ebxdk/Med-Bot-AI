@@ -67,20 +67,37 @@ def load_course_materials(path):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
     documents = []
     import os
-    for root, _, files in os.walk(path):
-        for file in files:
-            file_path = os.path.join(root, file)
-            if file.endswith(".pdf"):
-                text = load_text_from_pdf(file_path)
-            elif file.endswith(".docx"):
-                text = load_text_from_docx(file_path)
-            elif file.endswith(".html"):
-                text = load_text_from_html(file_path)
-            else:
-                continue
+
+    # If the provided path is a file, process it directly.
+    if os.path.isfile(path):
+        if path.endswith(".pdf"):
+            text = load_text_from_pdf(path)
+        elif path.endswith(".docx"):
+            text = load_text_from_docx(path)
+        elif path.endswith(".html"):
+            text = load_text_from_html(path)
+        else:
+            text = ""
+        if text:
             chunks = text_splitter.split_text(clean_text(text))
             for chunk in chunks:
-                documents.append(Document(page_content=chunk, metadata={"source": file_path}))
+                documents.append(Document(page_content=chunk, metadata={"source": path}))
+    else:
+        # Otherwise, assume it's a directory.
+        for root, _, files in os.walk(path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                if file.endswith(".pdf"):
+                    text = load_text_from_pdf(file_path)
+                elif file.endswith(".docx"):
+                    text = load_text_from_docx(file_path)
+                elif file.endswith(".html"):
+                    text = load_text_from_html(file_path)
+                else:
+                    continue
+                chunks = text_splitter.split_text(clean_text(text))
+                for chunk in chunks:
+                    documents.append(Document(page_content=chunk, metadata={"source": file_path}))
     return documents
 
 # --- RAG SETUP (if needed for context retrieval) ---
