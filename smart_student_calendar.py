@@ -21,8 +21,10 @@ from sentence_transformers import SentenceTransformer, util
 # Download NLTK resources (if not already downloaded)
 nltk.download('punkt')
 
-# Set your OpenAI API key (ensure it is set in your environment)
-openai.api_key = "sk-REPLACE_WITH_YOUR_KEY"
+# Load the API key from the environment variable
+openai.api_key = os.getenv("OPENAI_API_KEY")
+if not openai.api_key:
+    raise ValueError("OpenAI API key is not set. Please set OPENAI_API_KEY in your environment.")
 
 # ----------------------------
 # Step 1: Extract Text from PDF
