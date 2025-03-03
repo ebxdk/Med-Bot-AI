@@ -1,0 +1,12 @@
+openai==0.28.0
+faiss-cpu
+numpy
+pymupdf
+ipywidgets
+tiktoken
+pytesseract
+rank_bm25
+torch
+pandas
+nltk
+sentence-transformers
