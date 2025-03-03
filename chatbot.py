@@ -85,7 +85,7 @@ def load_course_materials(path):
 
 # --- RAG SETUP (if needed for context retrieval) ---
 # Replace the COURSE_MATERIALS_PATH with your actual path if using
-COURSE_MATERIALS_PATH = "/Med-Bot-AI/Mark Allen Weiss - Data structures and algorithm analysis in Java-Pearson (2012).pdf"
+COURSE_MATERIALS_PATH = "Mark Allen Weiss - Data structures and algorithm analysis in Java-Pearson  (2012).pdf"
 documents = load_course_materials(COURSE_MATERIALS_PATH)
 if not documents:
     raise ValueError("No documents were extracted from the provided course materials!")
