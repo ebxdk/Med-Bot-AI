@@ -19,8 +19,10 @@ from IPython.display import display, clear_output
 # -----------------------------
 # Set and get OpenAI API Key
 # -----------------------------
-os.environ["OPENAI_API_KEY"] = "sk-REPLACE_WITH_YOUR_KEY"
+# Load the API key from the environment variable
 openai.api_key = os.getenv("OPENAI_API_KEY")
+if not openai.api_key:
+    raise ValueError("OpenAI API key is not set. Please set OPENAI_API_KEY in your environment.")
 
 # -----------------------------
 # Global Variables & Filenames
