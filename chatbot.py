@@ -1,14 +1,15 @@
 """
 Modified chatbot.py for API integration.
-This module exposes a run(input_data) function that expects a dictionary with key:
+This module exposes a run(input_data) function that expects a dictionary with:
     - "message": the user's query
 and returns the generated chat response as a string.
 """
+
 try:
     import pysqlite3 as sqlite3
 except ImportError:
     import sqlite3
-    
+
 import os
 from pathlib import Path
 import openai
@@ -17,7 +18,7 @@ from PyPDF2 import PdfReader
 import docx  # pip install python-docx
 from bs4 import BeautifulSoup  # pip install beautifulsoup4
 
-# LangChain community imports (ensure these packages are installed)
+# LangChain imports
 from langchain_community.vectorstores import Chroma
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_openai import ChatOpenAI
@@ -28,11 +29,11 @@ from langchain.schema import Document
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain.chains.query_constructor.base import AttributeInfo
 
-# Load environment variables (if needed)
+# Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
 
-# Set OpenAI API key (ensure it is set in your environment)
+# Set OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 if openai.api_key is None:
     raise ValueError("OpenAI API Key not set. Please set OPENAI_API_KEY in your environment.")
@@ -40,9 +41,7 @@ if openai.api_key is None:
 # Disable tokenizer parallelism warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# --- DATA COLLECTION AND PREPROCESSING (if needed) ---
-# (These functions are left as-is if you need them in your backend.)
-
+# --- FILE PROCESSING FUNCTIONS ---
 def load_text_from_pdf(file_path):
     text = ""
     with open(file_path, "rb") as file:
@@ -54,7 +53,6 @@ def load_text_from_pdf(file_path):
     return text
 
 def load_text_from_docx(file_path):
-    import docx
     doc = docx.Document(file_path)
     return "\n".join([para.text for para in doc.paragraphs])
 
@@ -67,12 +65,9 @@ def clean_text(text):
     return text.replace("\n", " ").replace("  ", " ").strip()
 
 def load_course_materials(path):
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=100)
     documents = []
-    import os
 
-    # If the provided path is a file, process it directly.
     if os.path.isfile(path):
         if path.endswith(".pdf"):
             text = load_text_from_pdf(path)
@@ -87,7 +82,6 @@ def load_course_materials(path):
             for chunk in chunks:
                 documents.append(Document(page_content=chunk, metadata={"source": path}))
     else:
-        # Otherwise, assume it's a directory.
         for root, _, files in os.walk(path):
             for file in files:
                 file_path = os.path.join(root, file)
@@ -102,21 +96,33 @@ def load_course_materials(path):
                 chunks = text_splitter.split_text(clean_text(text))
                 for chunk in chunks:
                     documents.append(Document(page_content=chunk, metadata={"source": file_path}))
+    
     return documents
 
-# --- RAG SETUP (if needed for context retrieval) ---
-# Replace the COURSE_MATERIALS_PATH with your actual path if using
-COURSE_MATERIALS_PATH = "Mark Allen Weiss - Data structures and algorithm analysis in Java-Pearson  (2012).pdf"
+# --- VECTOR STORE SETUP ---
+COURSE_MATERIALS_PATH = "Mark Allen Weiss - Data structures and algorithm analysis in Java-Pearson (2012).pdf"
 documents = load_course_materials(COURSE_MATERIALS_PATH)
+
 if not documents:
     raise ValueError("No documents were extracted from the provided course materials!")
 
+# Load embeddings
 embeddings = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")
-vectorstore = Chroma.from_documents(documents, embeddings)
 
+# --- FIX: Use ChromaDB in-memory mode to avoid SQLite issues ---
+try:
+    vectorstore = Chroma.from_documents(documents, embeddings, persist_directory=None)  # In-memory mode
+except Exception as e:
+    print("❌ ChromaDB failed to initialize. Switching to FAISS.")
+    from langchain.vectorstores import FAISS
+    vectorstore = FAISS.from_documents(documents, embeddings)  # FAISS as backup
+
+# Metadata for self-query retriever
 metadata_field_info = [
     {"name": "source", "description": "The source file of the retrieved document.", "type": "string"},
 ]
+
+# Self-query retriever
 self_query_retriever = SelfQueryRetriever.from_llm(
     llm=ChatOpenAI(model_name="gpt-4-turbo", temperature=0.5),
     vectorstore=vectorstore,
@@ -125,6 +131,7 @@ self_query_retriever = SelfQueryRetriever.from_llm(
 )
 
 retriever = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": 3})
+
 retrieval_chain = RetrievalQA.from_chain_type(
     llm=ChatOpenAI(model_name="gpt-4-turbo", temperature=0.5),
     retriever=retriever,
@@ -145,21 +152,19 @@ def run(input_data):
     if not user_message:
         return "Error: No message provided."
 
-    # Retrieve relevant documents via self-query retriever
+    # Retrieve relevant documents
     try:
         self_query_results = self_query_retriever.get_relevant_documents(user_message)
         self_query_context = " ".join([doc.page_content for doc in self_query_results])
-    except Exception as e:
+    except Exception:
         self_query_context = ""
 
-    # Standard retrieval
     try:
         retrieved_docs = retriever.get_relevant_documents(user_message)
         retrieved_context = " ".join([doc.page_content for doc in retrieved_docs])
-    except Exception as e:
+    except Exception:
         retrieved_context = ""
 
-    # Merge contexts
     combined_context = f"{retrieved_context} {self_query_context}".strip()
 
     # Relevance scoring using semantic similarity
@@ -168,13 +173,8 @@ def run(input_data):
     similarity = util.pytorch_cos_sim(user_embedding, context_embedding).item()
     relevance_score = similarity
 
-    # Use context only if it is sufficiently relevant
-    if relevance_score < 0.5:
-        final_context = "No additional context is needed for this response."
-    else:
-        final_context = combined_context
+    final_context = "No additional context is needed for this response." if relevance_score < 0.5 else combined_context
 
-    # Build the response prompt
     response_prompt = f"""
 You are MedBot AI, a professional chatbot assistant for medical students.
 
@@ -186,22 +186,19 @@ Relevant Context:
 
 Please provide a clear and well-structured answer.
 """
+
     try:
-        # Use OpenAI ChatCompletion API (non-streaming version for simplicity)
         response = openai.ChatCompletion.create(
             model="gpt-4-turbo",
             messages=[{"role": "user", "content": response_prompt}],
             temperature=0.5,
             max_tokens=500
         )
-        answer = response["choices"][0]["message"]["content"].strip()
-        return answer
+        return response["choices"][0]["message"]["content"].strip()
     except Exception as e:
         return f"Error generating response: {str(e)}"
 
-# For testing the module directly
+# For testing
 if __name__ == '__main__':
-    # Example: run with a sample input message
     sample_input = {"message": "What are the symptoms of diabetes?"}
-    result = run(sample_input)
-    print("Chatbot Response:\n", result)
+    print("Chatbot Response:\n", run(sample_input))
