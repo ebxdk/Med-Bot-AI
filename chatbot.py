@@ -100,7 +100,7 @@ def load_course_materials(path):
     return documents
 
 # --- VECTOR STORE SETUP ---
-COURSE_MATERIALS_PATH = "Mark Allen Weiss - Data structures and algorithm analysis in Java-Pearson (2012).pdf"
+COURSE_MATERIALS_PATH = "/home/ebad_khan5487/Med-Bot-AI/Mark Allen Weiss - Data structures and algorithm analysis in Java-Pearson  (2012).pdf"
 documents = load_course_materials(COURSE_MATERIALS_PATH)
 
 if not documents:
