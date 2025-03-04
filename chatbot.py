@@ -114,7 +114,7 @@ try:
     vectorstore = Chroma.from_documents(documents, embeddings, persist_directory=None)  # In-memory mode
 except Exception as e:
     print("❌ ChromaDB failed to initialize. Switching to FAISS.")
-    from langchain.vectorstores import FAISS
+    from langchain_community.vectorstores import FAISS
     vectorstore = FAISS.from_documents(documents, embeddings)  # FAISS as backup
 
 # Metadata for self-query retriever
