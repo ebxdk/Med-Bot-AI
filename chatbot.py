@@ -4,7 +4,11 @@ This module exposes a run(input_data) function that expects a dictionary with ke
     - "message": the user's query
 and returns the generated chat response as a string.
 """
-
+try:
+    import pysqlite3 as sqlite3
+except ImportError:
+    import sqlite3
+    
 import os
 from pathlib import Path
 import openai
