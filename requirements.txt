@@ -2,6 +2,9 @@ openai==0.28.0
 faiss-cpu
 numpy
 pymupdf
+PyPDF2
+python-docx
+beautifulsoup4
 ipywidgets
 tiktoken
 pytesseract
